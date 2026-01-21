@@ -1,0 +1,18 @@
+[project]
+name = "qsvm-eeg"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.1",
+    "pandas>=2.3.3",
+    "pennylane>=0.44.0",
+    "scikit-learn>=1.8.0",
+    "scipy-stubs~=1.17.0",
+]
+
+[dependency-groups]
+dev = [
+    "jupyterlab>=4.5.2",
+]
