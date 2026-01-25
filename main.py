@@ -1,5 +1,6 @@
 import sys
 import time
+import joblib
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,15 +16,16 @@ from qsvm_eeg.data import load_raw_data, trim_zero_ends
 from qsvm_eeg.features import extract_features
 from qsvm_eeg.circuit import compute_kernel_matrix
 
-SAMPLE_LIMIT = 8000
+SAMPLE_LIMIT = 3000
 FS = 128
-PATIENT_ID = "48"
+PATIENT_ID = "411"
 
 ROOT_DIR = Path.cwd()
 DATA_DIR = ROOT_DIR / "data" / "raw"
 REPORT_DIR = ROOT_DIR / "reports"
 FIGURES_DIR = REPORT_DIR / "figures"
 LOGS_DIR = REPORT_DIR / "logs"
+MODEL_DIR = ROOT_DIR / "models"
 
 
 def save_plot(fig, name):
@@ -138,6 +140,18 @@ def main():
     save_plot(fig2, "correlation_plot")
 
     plt.show()
+
+    # print("7. Saving Model Artifacts...")
+    # artifacts = {
+    #     "model": model,
+    #     "scaler": scaler,
+    #     "X_train": X_train,
+    #     "support_indices": model.support_
+    # }
+    #
+    # model_filename = f"qsvm_patient48_{SAMPLE_LIMIT}_model_{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.pkl"
+    # joblib.dump(artifacts, MODEL_DIR / model_filename)
+    # print("   [Saved] qsvm_patient48_model.pkl")
 
 
 if __name__ == "__main__":
