@@ -1,6 +1,9 @@
 import numpy as np
-from scipy.signal import butter, filtfilt
+import time
+
 from joblib import Parallel, delayed
+from loguru import logger
+from scipy.signal import butter, filtfilt
 
 BANDS = {
     'delta': (0.5, 4), 'theta': (4, 8), 'alpha': (8, 13),
@@ -67,13 +70,18 @@ def _extract_single_window(start_idx, eeg, win_samples, fs):
 
 
 def extract_features(eeg, fs=128, window_sec=56, step_sec=1, n_jobs=-1):
+    t0 = time.perf_counter()
     win_samples = int(window_sec * fs)
     step_samples = int(step_sec * fs)
 
     starts = range(0, len(eeg) - win_samples + 1, step_samples)
+    logger.debug(f"Starting feature extraction on {len(starts)} windows")
 
-    results = Parallel(n_jobs=n_jobs)(
+    features = Parallel(n_jobs=n_jobs)(
         delayed(_extract_single_window)(s, eeg, win_samples, fs) for s in starts
     )
 
-    return np.array([f for f in results if f is not None])
+    duration = time.perf_counter() - t0
+    logger.info(f"BENCHMARK | Feature Extraction: {duration:.4f}s")
+
+    return np.array([f for f in features if f is not None])
