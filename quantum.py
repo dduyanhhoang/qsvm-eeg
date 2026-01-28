@@ -54,8 +54,8 @@ def parse_arguments():
     parser.add_argument(
         '-j', '--jobs',
         type=int,
-        default=-1,
-        help="Number of CPU cores for Kernel computation. Default: -1 (All cores)."
+        default=1,
+        help="Number of CPU cores for Kernel computation. Default: 1 (1 core)."
     )
 
     return parser.parse_args()
