@@ -38,13 +38,33 @@ Project structure
 
 ## Experiments
 
-Run script `main.py`. Set the sub-sample by edit the `SAMPLE_LIMIT`
-in `main.py` e.g.
+Run script `main.py`. 
 
-```python
-SAMPLE_LIMIT = 200
+```shell
+python main.py -h
+usage: main.py [-h] [-p PATIENTS [PATIENTS ...]] [-n SAMPLES] [-j JOBS]
+
+Run Kernel-based QSVM Experiment on EEG Data.
+
+options:
+  -h, --help            show this help message and exit
+  -p PATIENTS [PATIENTS ...], --patients PATIENTS [PATIENTS ...]
+                        List of Patient IDs to use. Default: ['48', '411', '58']
+  -n SAMPLES, --samples SAMPLES
+                        Total number of samples to use (distributed equally among patients). Default: Use all data.
+  -j JOBS, --jobs JOBS  Number of CPU cores for Kernel computation. Default: -1 (All cores).
 ```
 
-Or use the full dataset by set `SAMPLE_LIMIT` to `None`.
+Example
+
+```shell
+uv run main.py -p 48 -n 500 -j 2
+```
+
+The default run uses all available patients' data samples, all available processors.
+
+```shell
+python main.py
+```
 
 Experiments logs and plots will be generated to `reports` directory.
