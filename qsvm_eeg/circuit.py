@@ -1,8 +1,10 @@
-import pennylane as qml
-from pennylane.templates import AngleEmbedding
 import numpy as np
+import pennylane as qml
 import time
+
 from joblib import Parallel, delayed
+from loguru import logger
+from pennylane.templates import AngleEmbedding
 
 N_QUBITS = 11
 dev_kernel = qml.device("lightning.qubit", wires=N_QUBITS)
@@ -35,10 +37,10 @@ def compute_kernel_matrix(X_A, X_B, verbose=True):
     is_symmetric = np.array_equal(X_A, X_B)
 
     if verbose:
-        print(f"   Computing Quantum Kernel ({n_A} x {n_B})...")
-        print(f"   Mode: {'Symmetric + Parallel' if is_symmetric else 'Parallel'}")
+        logger.info(f"Computing Quantum Kernel ({n_A} x {n_B})...")
+        logger.debug(f"Mode: {'Symmetric + Parallel' if is_symmetric else 'Parallel'}")
 
-    start_t = time.time()
+    start_t = time.perf_counter()
 
     results = Parallel(n_jobs=-1, prefer="processes")(
         delayed(_compute_row)(i, X_A, X_B, is_symmetric) for i in range(n_A)
@@ -50,7 +52,7 @@ def compute_kernel_matrix(X_A, X_B, verbose=True):
         matrix = matrix + matrix.T - np.diag(np.diag(matrix))
 
     if verbose:
-        duration = time.time() - start_t
-        print(f"   Done in {duration:.1f}s")
+        duration = time.perf_counter() - start_t
+        logger.info(f"BENCHMARK | Kernel Construction: {duration:.4f}s | Matrix: {n_A}x{n_B}")
 
     return matrix

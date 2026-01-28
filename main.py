@@ -1,9 +1,10 @@
 import sys
 import time
 import joblib
-from pathlib import Path
-import numpy as np
+from loguru import logger
 import matplotlib.pyplot as plt
+import numpy as np
+from pathlib import Path
 from datetime import datetime
 
 from sklearn.svm import SVR
@@ -16,9 +17,9 @@ from qsvm_eeg.data import load_raw_data, trim_zero_ends
 from qsvm_eeg.features import extract_features
 from qsvm_eeg.circuit import compute_kernel_matrix
 
-SAMPLE_LIMIT = 3000
+SAMPLE_LIMIT = 8000
 FS = 128
-PATIENT_ID = "411"
+PATIENT_ID = "48"
 
 ROOT_DIR = Path.cwd()
 DATA_DIR = ROOT_DIR / "data" / "raw"
@@ -27,46 +28,54 @@ FIGURES_DIR = REPORT_DIR / "figures"
 LOGS_DIR = REPORT_DIR / "logs"
 MODEL_DIR = ROOT_DIR / "models"
 
+logger.remove()
+logger.add(sys.stderr,
+           format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{function}</cyan> - <level>{message}</level>")
+logger.add(LOGS_DIR / "benchmark_{time}.log", rotation="50 MB", level="INFO")
+
 
 def save_plot(fig, name):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = FIGURES_DIR / f"{name}_{timestamp}.png"
     fig.savefig(filename, dpi=300)
-    print(f"   [Saved Plot] {filename}")
+    logger.info(f"Saved Plot: {filename}")
 
 
 def log_results(metrics, params):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_file = LOGS_DIR / "experiment_log.csv"
 
-    header = "Timestamp,Patient,Sample_N,MSE,RMSE,R2,Pearson_R,CI_95,C,Epsilon,Kernel\n"
+    header = "Timestamp,Patient,Sample_N,MSE,RMSE,R2,Pearson_R,CI_95,C,Epsilon,Kernel,Train_Kernel_Sec,Infer_Kernel_Sec\n"
 
     if not log_file.exists():
-        with open(log_file, "w") as f:
-            f.write(header)
+        with open(log_file, "w") as f: f.write(header)
 
     with open(log_file, "a") as f:
         line = (f"{timestamp},{PATIENT_ID},{params['n_samples']},{metrics['mse']:.5f},"
                 f"{metrics['rmse']:.5f},{metrics['r2']:.5f},"
                 f"{metrics['pearson']:.5f},{metrics['ci']:.5f},"
-                f"{params['C']},{params['epsilon']},Quantum\n")
+                f"{params['C']},{params['epsilon']},Quantum,"
+                f"{metrics['train_time']:.4f},"
+                f"{metrics['infer_time']:.4f}\n")
         f.write(line)
-    print(f"   [Saved Log] {log_file}")
+    logger.success(f"Experiment logged to CSV: {log_file}")
 
 
 def main():
-    print(f"--- Starting Quantum Experiment (Patient {PATIENT_ID}) ---")
+    logger.info(f"Starting Quantum Kernel-based SVR Experiment (Patient {PATIENT_ID}) ---")
 
     eeg_path = DATA_DIR / f'patient{PATIENT_ID}_eeg.csv'
     bis_path = DATA_DIR / f'patient{PATIENT_ID}_bis.csv'
 
     eeg_raw, bis_raw = load_raw_data(eeg_path, bis_path)
-    if eeg_raw is None: return
+    if eeg_raw is None:
+        logger.error("Failed to load data.")
+        return
 
-    print("2. Aligning and Trimming...")
+    logger.info("Aligning and Trimming")
     eeg, bis = trim_zero_ends(eeg_raw, bis_raw, fs_eeg=FS)
 
-    print("3. Extracting Features...")
+    logger.info("Extracting Features")
     X = extract_features(eeg, fs=FS)
 
     advance_steps = 60
@@ -77,7 +86,7 @@ def main():
     y = y[:min_len]
 
     if SAMPLE_LIMIT and len(X) > SAMPLE_LIMIT:
-        print(f"   [INFO] Subsampling to {SAMPLE_LIMIT} samples.")
+        logger.warning(f"Subsampling to {SAMPLE_LIMIT} samples.")
         indices = np.linspace(0, len(X) - 1, SAMPLE_LIMIT).astype(int)
         X = X[indices]
         y = y[indices]
@@ -86,18 +95,29 @@ def main():
         X, y, test_size=0.2, shuffle=True, random_state=42
     )
 
-    print("4. Scaling Data...")
+    logger.info("Scaling Data")
     scaler = MinMaxScaler(feature_range=(0, np.pi))
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    print("5. Computing Quantum Kernels...")
+    logger.info("Computing Quantum Kernels")
+    t0_train = time.perf_counter()
     K_train = compute_kernel_matrix(X_train_scaled, X_train_scaled)
-    K_test = compute_kernel_matrix(X_test_scaled, X_train_scaled)
+    t1_train = time.perf_counter()
+    train_duration = t1_train - t0_train
 
-    print("6. Training SVR (C=20)...")
+    t0_test = time.perf_counter()
+    K_test = compute_kernel_matrix(X_test_scaled, X_train_scaled)
+    t1_test = time.perf_counter()
+    test_duration = t1_test - t0_test
+
+    logger.info("Training SVR (C=20)")
+    t_start_fit = time.perf_counter()
     model = SVR(kernel='precomputed', C=20.0, epsilon=0.1)
     model.fit(K_train, y_train)
+    t_end_fit = time.perf_counter()
+
+    logger.info(f"BENCHMARK | Training Time: {t_end_fit - t_start_fit:.4f}s")
 
     y_pred = model.predict(K_test)
 
@@ -109,16 +129,13 @@ def main():
     n = len(y_pred)
     overall_ci = 1.96 * np.std(y_pred - y_test) / np.sqrt(n)
 
-    print(f"\n--- FINAL RESULTS (N={len(X)}) ---")
-    print(f"MSE:    : {mse:.5f}")
-    print(f"RMSE    : {rmse:.5f}")
-    print(f"R2      : {r2:.5f}")
-    print(f"R       : {r_val:.5f}")
-    print(f"95% CI  : {overall_ci:.5f}")
+    logger.success(f"FINAL RESULTS (N={len(X)}) | RMSE: {rmse:.4f} | R2: {r2:.4f} | R: {r_val:.4f}")
 
     metrics = {
         'mse': mse, 'rmse': rmse, 'r2': r2,
-        'pearson': r_val, 'ci': overall_ci
+        'pearson': r_val, 'ci': overall_ci,
+        'train_time': train_duration,
+        'infer_time': test_duration
     }
     params = {'n_samples': len(X), 'C': 20.0, 'epsilon': 0.1}
 
@@ -140,18 +157,6 @@ def main():
     save_plot(fig2, "correlation_plot")
 
     plt.show()
-
-    # print("7. Saving Model Artifacts...")
-    # artifacts = {
-    #     "model": model,
-    #     "scaler": scaler,
-    #     "X_train": X_train,
-    #     "support_indices": model.support_
-    # }
-    #
-    # model_filename = f"qsvm_patient48_{SAMPLE_LIMIT}_model_{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.pkl"
-    # joblib.dump(artifacts, MODEL_DIR / model_filename)
-    # print("   [Saved] qsvm_patient48_model.pkl")
 
 
 if __name__ == "__main__":
