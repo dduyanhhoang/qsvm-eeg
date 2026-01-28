@@ -6,8 +6,8 @@ from loguru import logger
 from pennylane.templates import AngleEmbedding
 
 N_QUBITS = 11
-dev_kernel = qml.device("lightning.qubit", wires=N_QUBITS)
-BACKEND = "lightning.qubit"
+BACKEND = "lightning.gpu"
+dev_kernel = qml.device(BACKEND, wires=N_QUBITS)
 BROADCAST_BATCH_SIZE = 500
 
 
