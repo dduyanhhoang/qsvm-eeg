@@ -1,3 +1,16 @@
+# NOTE: Running Kernel-based QSVR
+#       Running with arguments:
+#           -p, --patients :    List of patient IDs (e.g., "48" "411"). 
+#                               Default: ["48", "411"] - All available patients
+#           -n, --samples  :    Total number of samples to use (subsampled evenly). 
+#                               Default: All available data.
+#           -j, --jobs     :    Number of CPU workers for parallel kernel calculation.
+#                               Default: 8 cores/processors.
+#
+#                               * Use -j 1 for small tests or single-GPU laptop runs.
+#                               * Use -j 8 for NVIDIA A100/HPC runs to maximize throughput.
+#                               * Consider lower the number of jobs if getting out or memory error
+
 import sys
 import time
 import argparse
@@ -28,6 +41,9 @@ FIGURES_DIR = REPORT_DIR / "figures"
 LOGS_DIR = REPORT_DIR / "logs"
 MODEL_DIR = ROOT_DIR / "models"
 
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+
 logger.remove()
 logger.add(sys.stderr,
            format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{function}</cyan> - <level>{message}</level>")
@@ -54,8 +70,8 @@ def parse_arguments():
     parser.add_argument(
         '-j', '--jobs',
         type=int,
-        default=1,
-        help="Number of CPU cores for Kernel computation. Default: 1 (1 core)."
+        default=8,
+        help="Number of CPU cores for Kernel computation. Default: 8 (8 cores)."
     )
 
     return parser.parse_args()
@@ -89,6 +105,10 @@ def log_results(metrics, params, experiment_id):
 
 
 def process_single_patient(pid, limit_per_patient):
+    """
+    Loads, cleans, and extracts features for a single patient.
+    Returns: X (Features), y (BIS Labels)
+    """
     logger.info(f"Processing Patient {pid}")
 
     eeg_path = DATA_DIR / f'patient{pid}_eeg.csv'
@@ -240,20 +260,20 @@ def main():
 
     log_results(metrics, params, experiment_id)
 
-    # fig1 = plt.figure(figsize=(10, 5))
-    # plt.plot(y_test, label='Actual BIS', alpha=0.7)
-    # plt.plot(y_pred, label='Quantum Prediction', linestyle='--')
-    # plt.title(f"{experiment_id}: RMSE={rmse:.2f}, R2={r2:.2f} (N={len(X)})")
-    # plt.legend()
-    # save_plot(fig1, f"pred_actual_{experiment_id}")
+    fig1 = plt.figure(figsize=(10, 5))
+    plt.plot(y_test, label='Actual BIS', alpha=0.7)
+    plt.plot(y_pred, label='Quantum Prediction', linestyle='--')
+    plt.title(f"{experiment_id}: RMSE={rmse:.2f}, R2={r2:.2f} (N={len(X)})")
+    plt.legend()
+    save_plot(fig1, f"pred_actual_{experiment_id}")
 
-    # fig2 = plt.figure(figsize=(8, 6))
-    # plt.scatter(y_pred, y_test, alpha=0.5, color='purple')
-    # plt.plot([min(y_pred), max(y_pred)], [min(y_pred), max(y_pred)], 'k--')
-    # plt.xlabel("Predicted")
-    # plt.ylabel("Actual")
-    # plt.title(f"Correlation: {experiment_id}")
-    # save_plot(fig2, f"corr_{experiment_id}")
+    fig2 = plt.figure(figsize=(8, 6))
+    plt.scatter(y_pred, y_test, alpha=0.5, color='purple')
+    plt.plot([min(y_pred), max(y_pred)], [min(y_pred), max(y_pred)], 'k--')
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.title(f"Correlation: {experiment_id}")
+    save_plot(fig2, f"corr_{experiment_id}")
 
 
 if __name__ == "__main__":

@@ -6,12 +6,24 @@ from loguru import logger
 from pennylane.templates import AngleEmbedding
 
 N_QUBITS = 11
+# NOTE: Settings for GPU using lightning.gpu device.
+#       Consider switching CPU using lightning.qubit
+#       if it's too slow, using n_jobs=-1 when run
+#       quantum.py:
+#
+#           python quantum.py -j -1
+#
+#       and the BROADCAST_BATCH_SIZE=500 for memory
+#       safety
 BACKEND = "lightning.gpu"
 dev_kernel = qml.device(BACKEND, wires=N_QUBITS)
-BROADCAST_BATCH_SIZE = 500
 
+# NOTE: BROADCAST_BATCH_SIZE controls PennyLane's Parameter Broadcasting.
+#       Consider lower the size if out of memory
+#       BROADCAST_BATCH_SIZE = 32768
+BROADCAST_BATCH_SIZE = 65536
 
-@qml.qnode(dev_kernel)
+@qml.qnode(dev_kernel, interface=None, diff_method=None)
 def kernel_circuit_broadcast(X_batch, x_single):
     AngleEmbedding(X_batch, wires=range(N_QUBITS))
     qml.adjoint(AngleEmbedding)(x_single, wires=range(N_QUBITS))
@@ -19,6 +31,9 @@ def kernel_circuit_broadcast(X_batch, x_single):
 
 
 def _compute_chunk(chunk_indices, X_A, X_B):
+    """
+    Worker function: Computes a subset (chunk) of rows for the Kernel Matrix.
+    """
     n_B = len(X_B)
     results = []
 

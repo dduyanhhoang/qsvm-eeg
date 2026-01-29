@@ -1,0 +1,23 @@
+2026-01-28 22:39:27.885 | INFO     | __main__:main:135 - Starting Experiment: Mix_48_411
+2026-01-28 22:39:27.885 | INFO     | __main__:main:136 - Config: Samples=3000 | Jobs=2
+2026-01-28 22:39:27.885 | INFO     | __main__:process_single_patient:92 - Processing Patient 48
+2026-01-28 22:39:39.318 | INFO     | qsvm_eeg.features:extract_features:85 - BENCHMARK | Feature Extraction: 11.3457s
+2026-01-28 22:39:39.327 | INFO     | __main__:process_single_patient:115 - Patient 48: Subsampling 8117 -> 1500 samples
+2026-01-28 22:39:39.328 | INFO     | __main__:process_single_patient:92 - Processing Patient 411
+2026-01-28 22:39:43.997 | INFO     | qsvm_eeg.features:extract_features:85 - BENCHMARK | Feature Extraction: 4.5483s
+2026-01-28 22:39:44.003 | INFO     | __main__:process_single_patient:115 - Patient 411: Subsampling 3799 -> 1500 samples
+2026-01-28 22:39:44.004 | INFO     | __main__:main:159 - Shuffling combined dataset
+2026-01-28 22:39:44.004 | INFO     | __main__:main:163 - Total Dataset Shape: (3000, 11)
+2026-01-28 22:39:44.005 | INFO     | __main__:main:169 - Scaling Data (MinMax 0 to pi)
+2026-01-28 22:39:44.007 | INFO     | __main__:main:174 - Computing Quantum Kernel Matrix (Train) | Jobs=2
+2026-01-28 22:39:44.007 | INFO     | qsvm_eeg.circuit:compute_kernel_matrix:48 - Computing Kernel (2400x2400) | Backend: lightning.gpu | Jobs: 2
+2026-01-29 03:13:39.899 | INFO     | qsvm_eeg.circuit:compute_kernel_matrix:71 - BENCHMARK | Kernel Time: 16348.43s
+2026-01-29 03:13:39.909 | INFO     | __main__:main:180 - Kernel Matrix (Train) Computed in 16348.4404s
+2026-01-29 03:13:39.910 | INFO     | __main__:main:182 - Starting Grid Search SVR (Quantum)
+2026-01-29 03:13:51.745 | SUCCESS  | __main__:main:207 - Best Params: {'C': 1000, 'epsilon': 0.5} | Best CV RMSE: 3.2498
+2026-01-29 03:13:51.745 | INFO     | __main__:main:208 - BENCHMARK | Kernel: 16348.44s + Tuning: 11.14s = Total: 16359.58s
+2026-01-29 03:13:51.745 | INFO     | __main__:main:210 - Computing Quantum Kernel Matrix (Test)
+2026-01-29 03:13:51.746 | INFO     | qsvm_eeg.circuit:compute_kernel_matrix:48 - Computing Kernel (600x2400) | Backend: lightning.gpu | Jobs: 2
+2026-01-29 04:22:01.647 | INFO     | qsvm_eeg.circuit:compute_kernel_matrix:71 - BENCHMARK | Kernel Time: 4007.39s
+2026-01-29 04:22:01.675 | SUCCESS  | __main__:main:226 - FINAL RESULTS | RMSE: 3.8290 | R2: 0.9487 | R: 0.9740 | 95% CI: 0.3064
+2026-01-29 04:22:01.678 | SUCCESS  | __main__:log_results:88 - Experiment logged to CSV: /home/al/project/qmos/qsvm-eeg/reports/logs/experiment_log.csv
