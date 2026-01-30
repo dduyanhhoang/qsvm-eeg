@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "loguru>=0.7.3",
     "matplotlib>=3.10.8",
+    "mlflow>=3.9.0",
     "numpy>=2.4.1",
     "pandas>=2.3.3",
     "pennylane>=0.44.0",
