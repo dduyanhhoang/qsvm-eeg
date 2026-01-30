@@ -107,13 +107,10 @@ def main():
         logger.info(f"CLASSICAL RESULT | MSE: {m['mse']:.4f}  | RMSE: {m['rmse']:.4f} | "
                     f"R2: {m['r2']:.4f} | R: {m['pearson']:.4f} | 95% CI: {m['ci']:.4f}")
 
-
     if 'Quantum' in results:
         m = results['Quantum']
         logger.info(f"QUANTUM   RESULT | MSE: {m['mse']:.4f}  | RMSE: {m['rmse']:.4f} | "
                     f"R2: {m['r2']:.4f} | R: {m['pearson']:.4f} | 95% CI: {m['ci']:.4f}")
-
-    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":
