@@ -14,6 +14,8 @@
 import sys
 import time
 import argparse
+from typing import Optional
+
 import joblib
 from loguru import logger
 import matplotlib.pyplot as plt
@@ -50,7 +52,12 @@ logger.add(sys.stderr,
 logger.add(LOGS_DIR / "benchmark_{time}.log", rotation="50 MB", level="INFO")
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
+    """
+    Parses command-line arguments to configure the experiment
+
+    Run -h, --help to check available options
+    """
     parser = argparse.ArgumentParser(description="Run Kernel-based QSVM Experiment on EEG Data.")
 
     parser.add_argument(
@@ -74,17 +81,36 @@ def parse_arguments():
         help="Number of CPU cores for Kernel computation. Default: 8 (8 cores)."
     )
 
+    parser.add_argument(
+        '-bs', '--batch-size',
+        type=int,
+        default=None,
+        help="Broadcast Batch Size (e.g., 32768 for GPU, 500 for CPU)."
+    )
+
+    # NEW ARGUMENT
+    parser.add_argument(
+        '-be', '--backend',
+        type=str,
+        default="lightning.gpu",
+        choices=["lightning.gpu", "lightning.qubit", "default.qubit"],
+        help="PennyLane Backend to use. Default: lightning.gpu"
+    )
+
     return parser.parse_args()
 
 
-def save_plot(fig, name):
+def save_plot(fig: plt.Figure, name: str) -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = FIGURES_DIR / f"{name}_{timestamp}.png"
     fig.savefig(filename, dpi=300)
     logger.info(f"Saved Plot: {filename}")
 
 
-def log_results(metrics, params, experiment_id):
+def log_results(metrics: dict, params: dict, experiment_id: str) -> None:
+    """
+    Appends experiment results to a Master CSV file for tracking performance over time.
+    """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_file = LOGS_DIR / "experiment_log.csv"
 
@@ -104,9 +130,15 @@ def log_results(metrics, params, experiment_id):
     logger.success(f"Experiment logged to CSV: {log_file}")
 
 
-def process_single_patient(pid, limit_per_patient):
+def process_single_patient(pid: str,
+                           limit_per_patient: Optional[int]) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     """
     Loads, cleans, and extracts features for a single patient.
+
+    Args:
+        pid (str): patient id
+        limit_per_patient (Optional[int]): patient's subsamples
+
     Returns: X (Features), y (BIS Labels)
     """
     logger.info(f"Processing Patient {pid}")
@@ -119,10 +151,14 @@ def process_single_patient(pid, limit_per_patient):
         logger.error(f"Failed to load data for Patient {pid}")
         return None, None
 
+    # Trim silent periods
     eeg, bis = trim_zero_ends(eeg_raw, bis_raw, fs_eeg=FS)
 
+    # Extract spectral/entropy features
     X = extract_features(eeg, fs=FS)
 
+    # Align labels
+    # BIS monitors have a delay; we predict the value 60 seconds ahead of the window start.
     advance_steps = 60
     y = bis[advance_steps:]
 
@@ -130,6 +166,7 @@ def process_single_patient(pid, limit_per_patient):
     X = X[:min_len]
     y = y[:min_len]
 
+    # Subsampling
     if limit_per_patient is not None:
         if len(X) > limit_per_patient:
             logger.info(f"Patient {pid}: Subsampling {len(X)} -> {limit_per_patient} samples")
@@ -147,6 +184,7 @@ def process_single_patient(pid, limit_per_patient):
 def main():
     args = parse_arguments()
 
+    # Create experiment id
     if len(args.patients) == 1:
         experiment_id = f"Single_{args.patients[0]}"
     else:
@@ -155,9 +193,11 @@ def main():
     logger.info(f"Starting Experiment: {experiment_id}")
     logger.info(f"Config: Samples={args.samples if args.samples else 'ALL'} | Jobs={args.jobs}")
 
+    # Start: Load & process data
     X_combined = []
     y_combined = []
 
+    # Calculate subsample
     if args.samples is not None:
         limit_per_patient = args.samples // len(args.patients)
     else:
@@ -182,23 +222,32 @@ def main():
 
     logger.info(f"Total Dataset Shape: {X.shape}")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, shuffle=True, random_state=42
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y,
+                                                        test_size=0.2,
+                                                        shuffle=True,
+                                                        random_state=42)
 
+    # Start: Scaling
     logger.info("Scaling Data (MinMax 0 to pi)")
+    # Using MinMaxScaler, mapping input to range [0, pi]
+    # for better angle encoding
     scaler = MinMaxScaler(feature_range=(0, np.pi))
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
+    # Start: Compute quantum kernel for SVR training
     logger.info(f"Computing Quantum Kernel Matrix (Train) | Jobs={args.jobs}")
     t0_kernel_train = time.perf_counter()
     
-    K_train = compute_kernel_matrix(X_train_scaled, X_train_scaled, n_jobs=args.jobs)
+    K_train = compute_kernel_matrix(X_train_scaled, X_train_scaled,
+                                    n_jobs=args.jobs,
+                                    batch_size=args.batch_size,
+                                    backend=args.backend)
     
     kernel_train_time = time.perf_counter() - t0_kernel_train
     logger.info(f"Kernel Matrix (Train) Computed in {kernel_train_time:.4f}s")
 
+    # Start: Hyperparameter tuning
     logger.info("Starting Grid Search SVR (Quantum)")
     t0_fit = time.perf_counter()
 
@@ -227,14 +276,19 @@ def main():
     logger.success(f"Best Params: {best_params} | Best CV RMSE: {-grid_search.best_score_:.4f}")
     logger.info(f"BENCHMARK | Kernel: {kernel_train_time:.2f}s + Tuning: {fit_time:.2f}s = Total: {total_train_time:.2f}s")
 
+    # Start: Compute quantum kernel for SVR testing
     logger.info("Computing Quantum Kernel Matrix (Test)")
     t0_test_kernel = time.perf_counter()
     
-    K_test = compute_kernel_matrix(X_test_scaled, X_train_scaled, n_jobs=args.jobs)
+    K_test = compute_kernel_matrix(X_test_scaled, X_train_scaled,
+                                   n_jobs=args.jobs,
+                                   batch_size=args.batch_size,
+                                   backend=args.backend)
     y_pred = best_model.predict(K_test)
     
     total_infer_time = time.perf_counter() - t0_test_kernel
 
+    # Start: Extract, log metrics for evaluation
     mse = mean_squared_error(y_test, y_pred)
     rmse = np.sqrt(mse)
     r2 = r2_score(y_test, y_pred)
@@ -260,6 +314,7 @@ def main():
 
     log_results(metrics, params, experiment_id)
 
+    # Start: Plot
     fig1 = plt.figure(figsize=(10, 5))
     plt.plot(y_test, label='Actual BIS', alpha=0.7)
     plt.plot(y_pred, label='Quantum Prediction', linestyle='--')
