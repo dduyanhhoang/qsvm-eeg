@@ -1,0 +1,13 @@
+2026-01-28 21:52:10.144 | INFO     | __main__:main:135 - Starting Experiment: Mix_48_411
+2026-01-28 21:52:10.144 | INFO     | __main__:main:136 - Config: Samples=3000 | Jobs=1
+2026-01-28 21:52:10.144 | INFO     | __main__:process_single_patient:92 - Processing Patient 48
+2026-01-28 21:52:20.547 | INFO     | qsvm_eeg.features:extract_features:85 - BENCHMARK | Feature Extraction: 10.3257s
+2026-01-28 21:52:20.555 | INFO     | __main__:process_single_patient:115 - Patient 48: Subsampling 8117 -> 1500 samples
+2026-01-28 21:52:20.556 | INFO     | __main__:process_single_patient:92 - Processing Patient 411
+2026-01-28 21:52:24.914 | INFO     | qsvm_eeg.features:extract_features:85 - BENCHMARK | Feature Extraction: 4.2451s
+2026-01-28 21:52:24.919 | INFO     | __main__:process_single_patient:115 - Patient 411: Subsampling 3799 -> 1500 samples
+2026-01-28 21:52:24.919 | INFO     | __main__:main:159 - Shuffling combined dataset
+2026-01-28 21:52:24.920 | INFO     | __main__:main:163 - Total Dataset Shape: (3000, 11)
+2026-01-28 21:52:24.920 | INFO     | __main__:main:169 - Scaling Data (MinMax 0 to pi)
+2026-01-28 21:52:24.921 | INFO     | __main__:main:174 - Computing Quantum Kernel Matrix (Train) | Jobs=1
+2026-01-28 21:52:24.921 | INFO     | qsvm_eeg.circuit:compute_kernel_matrix:48 - Computing Kernel (2400x2400) | Backend: lightning.gpu | Jobs: 1
