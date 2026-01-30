@@ -6,31 +6,17 @@ DESCRIPTION:
     It uses a standard Radial Basis Function (RBF) kernel SVM to predict BIS.
 
 USAGE:
-    # Run standalone
-    python classical.py -p 48 411 -j 8
-
-    # Run via main.py
-    python main.py --mode classical -p 48 411
-
-    # Check help
-    python classical.py -h
-
-NOTE: Running Classical SVR (RBF Kernel)
-      Running with arguments:
-          -p, --patients :    List of patient IDs (e.g., "48" "411").
-                              Default: ["48", "411"]
-          -n, --samples  :    Total number of samples to use (subsampled evenly).
-                              Default: All available data.
-          -j, --jobs     :    Number of CPU cores for Grid Search.
-                              Default: -1 (Use all available cores).
+    # Run via main.py (Recommended)
+    uv run main.py --mode classical -p 48 411
 """
 
 import sys
 import time
 import argparse
+import tempfile
 from typing import Optional, Dict, Tuple, List
 
-import joblib
+import mlflow
 from loguru import logger
 import matplotlib.pyplot as plt
 import numpy as np
@@ -51,19 +37,6 @@ AVAILABLE_PATIENTS: List[str] = ["48", "411"]
 
 ROOT_DIR = Path.cwd()
 DATA_DIR = ROOT_DIR / "data" / "raw"
-REPORT_DIR = ROOT_DIR / "reports"
-FIGURES_DIR = REPORT_DIR / "figures"
-LOGS_DIR = REPORT_DIR / "logs"
-
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
-FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-
-logger.remove()
-logger.add(
-    sys.stderr,
-    format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{function}</cyan> - <level>{message}</level>",
-)
-logger.add(LOGS_DIR / "benchmark_classical_{time}.log", rotation="50 MB", level="INFO")
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -96,40 +69,10 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def log_results(metrics: Dict[str, float], params: Dict[str, any], experiment_id: str) -> None:
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_file = LOGS_DIR / "experiment_log.csv"
-
-    header = "Timestamp,Experiment_ID,Sample_N,MSE,RMSE,R2,Pearson_R,CI_95,C,Epsilon,Kernel,Train_Kernel_Sec,Infer_Kernel_Sec\n"
-    if not log_file.exists():
-        with open(log_file, "w") as f:
-            f.write(header)
-
-    with open(log_file, "a") as f:
-        # Note: Kernel is labeled 'Classical_RBF' for comparison
-        line = (
-            f"{timestamp},{experiment_id},{params['n_samples']},{metrics['mse']:.5f},"
-            f"{metrics['rmse']:.5f},{metrics['r2']:.5f},"
-            f"{metrics['pearson']:.5f},{metrics['ci']:.5f},"
-            f"{params['C']},{params['epsilon']},Classical_RBF,"
-            f"{metrics['train_time']:.4f},"
-            f"{metrics['infer_time']:.4f}\n"
-        )
-        f.write(line)
-    logger.success(f"Logged to CSV: {log_file}")
-
-
 def process_single_patient(pid: str, limit_per_patient: Optional[int]) -> Tuple[
     Optional[np.ndarray], Optional[np.ndarray]]:
     """
     Loads, cleans, and extracts features for a single patient.
-
-    Args:
-        pid (str): Patient ID.
-        limit_per_patient (Optional[int]): Number of samples to take.
-
-    Returns:
-        tuple: (X_features, y_labels)
     """
     logger.info(f"Processing Patient {pid}")
     eeg_path = DATA_DIR / f"patient{pid}_eeg.csv"
@@ -168,117 +111,154 @@ def run_classical(args: argparse.Namespace) -> dict:
     else:
         experiment_id = f"Mix_{'_'.join(args.patients)}"
 
-    logger.info(f"Starting Classical SVR (RBF) Experiment: {experiment_id}")
-    logger.info(f"Config: Samples={args.samples if args.samples else 'ALL'} | Jobs={args.jobs}")
+    run_name = f"Classical_{experiment_id}"
 
-    # Start: Load & Process Data
-    X_combined, y_combined = [], []
-    limit = args.samples // len(args.patients) if args.samples else None
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
 
-    for pid in args.patients:
-        X_p, y_p = process_single_patient(pid, limit)
-        if X_p is not None:
-            X_combined.append(X_p)
-            y_combined.append(y_p)
+        # 1. Setup Temp Log File
+        logger.remove()
+        logger.add(
+            sys.stderr,
+            format="<green>{time:HH:mm:ss}</green> "
+                   "| <level>{level: <8}</level> "
+                   "| <cyan>{function}</cyan> - <level>{message}</level>",
+        )
 
-    if not X_combined:
-        return
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        log_file = tmp_path / f"classical_{timestamp}.log"
+        log_handler_id = logger.add(log_file, level="INFO")
 
-    X = np.vstack(X_combined)
-    y = np.concatenate(y_combined)
+        mlflow.set_experiment("QSVM_EEG_Comparison")
 
-    logger.info("Shuffling combined dataset")
-    p = np.random.RandomState(42).permutation(len(X))
-    X, y = X[p], y[p]
+        try:
+            with mlflow.start_run(run_name=run_name) as run:
+                logger.info(f"Starting MLflow Run: {run.info.run_id}")
+                mlflow.log_params(vars(args))
+                mlflow.log_param("model_type", "Classical_RBF")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, shuffle=True, random_state=42
-    )
+                logger.info(f"Starting Classical SVR (RBF) Experiment: {experiment_id}")
+                logger.info(f"Config: Samples={args.samples if args.samples else 'ALL'} | Jobs={args.jobs}")
 
-    # Start: Scaling
-    # Classical SVM works best with StandardScaler (Mean=0, Std=1)
-    logger.info("Scaling Data (StandardScaler)")
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+                # Start: Load & Process Data
+                X_combined, y_combined = [], []
+                limit = args.samples // len(args.patients) if args.samples else None
 
-    # Start: Hyperparameter tunning
-    logger.info("Starting Grid Search (Classical)")
+                for pid in args.patients:
+                    X_p, y_p = process_single_patient(pid, limit)
+                    if X_p is not None:
+                        X_combined.append(X_p)
+                        y_combined.append(y_p)
 
-    param_grid = {
-        "C": [0.1, 1, 10, 50, 100, 500, 1000],
-        "epsilon": [0.1, 0.5, 1.0, 2.0, 4.0],
-        "gamma": ["scale", "auto"],
-    }
+                if not X_combined:
+                    return
 
-    t0_train = time.perf_counter()
+                X = np.vstack(X_combined)
+                y = np.concatenate(y_combined)
 
-    # Use args.jobs to control parallelism
-    n_jobs = getattr(args, 'jobs', -1)
+                logger.info("Shuffling combined dataset")
+                p = np.random.RandomState(42).permutation(len(X))
+                X, y = X[p], y[p]
 
-    grid_search = GridSearchCV(
-        SVR(kernel="rbf"),
-        param_grid,
-        cv=5,
-        scoring="neg_root_mean_squared_error",
-        n_jobs=n_jobs,
-        verbose=0,
-    )
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=0.2, shuffle=True, random_state=42
+                )
 
-    grid_search.fit(X_train_scaled, y_train)
-    train_time = time.perf_counter() - t0_train
+                # Start: Scaling
+                logger.info("Scaling Data (StandardScaler)")
+                scaler = StandardScaler()
+                X_train_scaled = scaler.fit_transform(X_train)
+                X_test_scaled = scaler.transform(X_test)
 
-    best_model = grid_search.best_estimator_
-    best_params = grid_search.best_params_
+                # Start: Hyperparameter tunning
+                logger.info("Starting Grid Search (Classical)")
 
-    logger.success(
-        f"Best Params: {best_params} | Best CV RMSE: {-grid_search.best_score_:.4f}"
-    )
-    logger.info(f"BENCHMARK | Total Tuning Time: {train_time:.4f}s")
+                param_grid = {
+                    "C": [0.1, 1, 10, 50, 100, 500, 1000],
+                    "epsilon": [0.1, 0.5, 1.0, 2.0, 4.0],
+                    "gamma": ["scale", "auto"],
+                }
 
-    # Start: Test
-    t0_infer = time.perf_counter()
-    y_pred = best_model.predict(X_test_scaled)
-    infer_time = time.perf_counter() - t0_infer
+                t0_train = time.perf_counter()
 
-    # Start: Evaluation
-    mse = mean_squared_error(y_test, y_pred)
-    rmse = np.sqrt(mse)
-    r2 = r2_score(y_test, y_pred)
-    r_val, _ = pearsonr(y_test, y_pred)
-    ci = 1.96 * np.std(y_pred - y_test) / np.sqrt(len(y_pred))
+                n_jobs = getattr(args, 'jobs', -1)
 
-    logger.success(f"CLASSICAL RESULTS | RMSE: {rmse:.4f} | R2: {r2:.4f} | 95% CI: {ci:.4f}")
+                grid_search = GridSearchCV(
+                    SVR(kernel="rbf"),
+                    param_grid,
+                    cv=5,
+                    scoring="neg_root_mean_squared_error",
+                    n_jobs=n_jobs,
+                    verbose=0,
+                )
 
-    metrics = {
-        "mse": mse,
-        "rmse": rmse,
-        "r2": r2,
-        "pearson": r_val,
-        "ci": ci,
-        "train_time": train_time,
-        "infer_time": infer_time,
-    }
+                grid_search.fit(X_train_scaled, y_train)
+                train_time = time.perf_counter() - t0_train
 
-    params = {
-        "n_samples": len(X),
-        "C": best_params["C"],
-        "epsilon": best_params["epsilon"],
-    }
+                best_model = grid_search.best_estimator_
+                best_params = grid_search.best_params_
 
-    log_results(metrics, params, experiment_id)
+                logger.success(
+                    f"Best Params: {best_params} | Best CV RMSE: {-grid_search.best_score_:.4f}"
+                )
+                logger.info(f"BENCHMARK | Total Tuning Time: {train_time:.4f}s")
 
-    # Optional Plotting
-    fig = plt.figure(figsize=(10, 5))
-    plt.plot(y_test, label='Actual', alpha=0.7)
-    plt.plot(y_pred, label='Classical RBF', linestyle='--')
-    plt.title(f"Classical RBF: {experiment_id} (N={len(X)}) | R2={r2:.2f}")
-    plt.legend()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = FIGURES_DIR / f"classical_pred_{experiment_id}_{timestamp}.png"
-    fig.savefig(filename, dpi=300)
+                mlflow.log_params(best_params)
 
-    return metrics
+                # Start: Test
+                t0_infer = time.perf_counter()
+                y_pred = best_model.predict(X_test_scaled)
+                infer_time = time.perf_counter() - t0_infer
+
+                # Start: Evaluation
+                mse = mean_squared_error(y_test, y_pred)
+                rmse = np.sqrt(mse)
+                r2 = r2_score(y_test, y_pred)
+                r_val, _ = pearsonr(y_test, y_pred)
+                ci = 1.96 * np.std(y_pred - y_test) / np.sqrt(len(y_pred))
+
+                logger.success(f"CLASSICAL RESULTS | RMSE: {rmse:.4f} | R2: {r2:.4f} | 95% CI: {ci:.4f}")
+
+                metrics = {
+                    "mse": mse,
+                    "rmse": rmse,
+                    "r2": r2,
+                    "pearson": r_val,
+                    "ci": ci,
+                    "train_time": train_time,
+                    "infer_time": infer_time,
+                }
+
+                mlflow.log_metrics(metrics)
+
+                # Start: Plot
+                fig1 = plt.figure(figsize=(10, 5))
+                plt.plot(y_test, label='Actual', alpha=0.7)
+                plt.plot(y_pred, label='Classical RBF', linestyle='--')
+                plt.title(f"Classical RBF: {experiment_id} (N={len(X)}) | R2={r2:.2f}")
+                plt.legend()
+
+                plot_file1 = tmp_path / f"pred_actual_{experiment_id}.png"
+                fig1.savefig(plot_file1, dpi=300)
+                mlflow.log_artifact(plot_file1, artifact_path="figures")
+
+                fig2 = plt.figure(figsize=(8, 6))
+                plt.scatter(y_pred, y_test, alpha=0.5, color='purple')
+                plt.plot([min(y_pred), max(y_pred)], [min(y_pred), max(y_pred)], 'k--')
+                plt.xlabel("Predicted")
+                plt.ylabel("Actual")
+                plt.title(f"Correlation: {experiment_id}")
+
+                plot_file2 = tmp_path / f"corr_{experiment_id}.png"
+                fig2.savefig(plot_file2, dpi=300)
+                mlflow.log_artifact(plot_file2, artifact_path="figures")
+
+                mlflow.log_artifact(log_file, artifact_path="logs")
+
+                return metrics
+
+        finally:
+            logger.remove(log_handler_id)
 
 
 def main():
