@@ -1,0 +1,15 @@
+2026-01-30 13:21:04.401 | INFO     | __main__:main:81 - Experiment starting | Mode: COMPARE
+2026-01-30 13:21:04.401 | INFO     | __main__:main:86 - Starting Classical SVM Pipeline
+2026-01-30 13:21:05.240 | INFO     | classical:run_classical:183 - Starting MLflow Run: d301d1ba71d04a5fbd7dac2e9431ba7c
+2026-01-30 13:21:05.253 | INFO     | classical:run_classical:187 - Starting Classical SVR (RBF) Experiment: Single_48
+2026-01-30 13:21:05.253 | INFO     | classical:run_classical:188 - Config: Samples=500 | Jobs=1
+2026-01-30 13:21:05.253 | INFO     | classical:process_single_patient:141 - Processing Patient 48
+2026-01-30 13:21:16.236 | INFO     | qsvm_eeg.features:extract_features:162 - BENCHMARK | Feature Extraction: 10.8812s
+2026-01-30 13:21:16.244 | INFO     | classical:process_single_patient:164 - Patient 48: Subsampling 8117 -> 500
+2026-01-30 13:21:16.245 | INFO     | classical:run_classical:206 - Shuffling combined dataset
+2026-01-30 13:21:16.246 | INFO     | classical:run_classical:216 - Scaling Data (StandardScaler)
+2026-01-30 13:21:16.247 | INFO     | classical:run_classical:222 - Starting Grid Search (Classical)
+2026-01-30 13:21:22.110 | SUCCESS  | classical:run_classical:250 - Best Params: {'C': 50, 'epsilon': 0.1, 'gamma': 'auto'} | Best CV RMSE: 4.5108
+2026-01-30 13:21:22.110 | INFO     | classical:run_classical:253 - BENCHMARK | Total Tuning Time: 5.8629s
+2026-01-30 13:21:22.126 | SUCCESS  | classical:run_classical:269 - CLASSICAL RESULTS | RMSE: 4.9813 | R2: 0.8569 | 95% CI: 0.9753
+2026-01-30 13:21:22.137 | SUCCESS  | classical:log_results:126 - Logged to CSV: C:\Users\dduya\Work\1 project\qsvm-eeg\reports\logs\experiment_log.csv
