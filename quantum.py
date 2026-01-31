@@ -66,8 +66,6 @@ MODEL_DIR = ROOT_DIR / "models"
 
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-RUN_LOG_FILE = LOGS_DIR / f"quantum_{timestamp}.log"
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -176,11 +174,6 @@ def process_single_patient(pid: str,
 
 
 def run_quantum(args) -> dict:
-    logger.remove()
-    logger.add(sys.stderr,
-               format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{function}</cyan> - <level>{message}</level>")
-    logger.add(RUN_LOG_FILE, rotation="50 MB", level="INFO")
-
     mlflow.set_experiment("QSVM_EEG_Comparison")
 
     # Create experiment id
@@ -193,13 +186,9 @@ def run_quantum(args) -> dict:
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
-        logger.remove()
-        logger.add(
-            sys.stderr,
-            format="<green>{time:HH:mm:ss}</green> "
-                   "| <level>{level: <8}</level> "
-                   "| <cyan>{function}</cyan> - <level>{message}</level>",
-        )
+
+        # 1. Setup Temp Log File
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         log_file = tmp_path / f"classical_{timestamp}.log"
         log_handler_id = logger.add(log_file, level="INFO")
 
@@ -238,11 +227,6 @@ def run_quantum(args) -> dict:
                 y = np.concatenate(y_combined)
 
                 logger.info("Shuffling combined dataset")
-                p = np.random.RandomState(42).permutation(len(X))
-                X, y = X[p], y[p]
-
-                logger.info(f"Total Dataset Shape: {X.shape}")
-
                 X_train, X_test, y_train, y_test = train_test_split(X, y,
                                                                     test_size=0.2,
                                                                     shuffle=True,
@@ -361,7 +345,7 @@ def run_quantum(args) -> dict:
                 fig2.savefig(plot_file2, dpi=300)
                 mlflow.log_artifact(plot_file2, artifact_path="figures")
 
-                mlflow.log_artifact(RUN_LOG_FILE, artifact_path="logs")
+                mlflow.log_artifact(log_file, artifact_path="logs")
                 return metrics
         finally:
             logger.remove(log_handler_id)

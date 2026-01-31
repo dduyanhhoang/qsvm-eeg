@@ -117,14 +117,6 @@ def run_classical(args: argparse.Namespace) -> dict:
         tmp_path = Path(tmp_dir)
 
         # 1. Setup Temp Log File
-        logger.remove()
-        logger.add(
-            sys.stderr,
-            format="<green>{time:HH:mm:ss}</green> "
-                   "| <level>{level: <8}</level> "
-                   "| <cyan>{function}</cyan> - <level>{message}</level>",
-        )
-
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         log_file = tmp_path / f"classical_{timestamp}.log"
         log_handler_id = logger.add(log_file, level="INFO")
@@ -157,12 +149,10 @@ def run_classical(args: argparse.Namespace) -> dict:
                 y = np.concatenate(y_combined)
 
                 logger.info("Shuffling combined dataset")
-                p = np.random.RandomState(42).permutation(len(X))
-                X, y = X[p], y[p]
-
-                X_train, X_test, y_train, y_test = train_test_split(
-                    X, y, test_size=0.2, shuffle=True, random_state=42
-                )
+                X_train, X_test, y_train, y_test = train_test_split(X, y,
+                                                                    test_size=0.2,
+                                                                    shuffle=True,
+                                                                    random_state=42)
 
                 # Start: Scaling
                 logger.info("Scaling Data (StandardScaler)")
