@@ -1,0 +1,36 @@
+experiment_name: "QSVM_EEG_Comparison"
+random_state: 42
+
+patients: [ "411" ]
+
+fs: 128
+advance_steps: 60
+window_sec: 56.0
+step_sec: 1.0
+
+dirs:
+  raw: "data/raw"
+  processed: "data/processed"
+  models: "data/models"
+  reports: "reports"
+  figures: "reports/figures"
+  logs: "reports/logs"
+
+jobs: -1
+#backend: "lightning.gpu"
+batch_size: 500
+samples: null
+
+models:
+  svr_rbf:
+    enabled: true
+    param_grid:
+      C: [ 0.1, 1, 10, 50, 100, 500, 1000 ]
+      epsilon: [ 0.1, 0.5, 1.0, 2.0, 4.0 ]
+      gamma: [ "scale", "auto", 0.001, 0.01, 0.1, 1 ]
+
+  svr_qkernel:
+    enabled: false
+    param_grid:
+      C: [ 0.1, 1, 10, 50, 100, 500, 1000 ]
+      epsilon: [ 0.1, 0.5, 1.0, 2.0, 4.0 ]
